@@ -103,3 +103,9 @@ class Task(Base):
         "User",
         foreign_keys=[assignee_id],
     )
+    
+    comments: Mapped[list["Comment"]] = relationship(
+        "Comment",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )

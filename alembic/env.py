@@ -11,6 +11,7 @@ from app.database import Base
 
 from app.user.models import User as UserModel
 from app.task.models import Task as TaskModel
+from app.comment.models import Comment as CommentModel
 
 
 config = context.config

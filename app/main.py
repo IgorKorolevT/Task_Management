@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.config import get_settings
 from app.user.routes import router as user_router
 from app.task.routes import router as task_router
+from app.comment.router import router as comment_router
 
 
 settings = get_settings()
@@ -30,6 +31,10 @@ app.include_router(
 )
 app.include_router(
     task_router,
+    prefix=settings.API_V1_PREFIX,
+)
+app.include_router(
+    comment_router,
     prefix=settings.API_V1_PREFIX,
 )
 
