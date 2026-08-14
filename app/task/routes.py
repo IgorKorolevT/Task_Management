@@ -9,7 +9,7 @@ from app.task.schemas import (
     TaskResponse,
     TaskStatisticsResponse,
     TaskStatusUpdate,
-    TaskUpdate, TaskListResponse, TaskFilter,
+    TaskUpdate,
 )
 from app.task.service import TaskService
 from app.user.auth import get_current_user
