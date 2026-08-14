@@ -64,6 +64,10 @@ async def test_db():
 
         await engine.dispose()
 
+@pytest_asyncio.fixture
+async def db(test_db):
+    async with test_db() as session:
+        yield session
 
 @pytest_asyncio.fixture
 async def client(test_db):
