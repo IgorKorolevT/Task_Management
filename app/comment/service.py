@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from datetime import datetime, timezone
 from app.comment.dao import CommentDAO
 from app.comment.models import Comment
 from app.comment.schemas import CommentCreate
@@ -59,3 +59,14 @@ class CommentService:
             session,
             task_id,
         )
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def ensure_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(timezone.utc)
