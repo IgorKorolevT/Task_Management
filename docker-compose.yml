@@ -1,57 +1,102 @@
-version: '3.9'
+version: "3.9"
 
 services:
   db:
     image: postgres:16-alpine
     container_name: task_management_db
-    env_file: .env
+    env_file:
+      - .env
+
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+
     ports:
       - "${DB_PORT:-5432}:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
     networks:
       - task_network
 
-  tests:
-    build: .
-    container_name: task_management_tests
-    command: uv run pytest -v app/tests/
-    env_file: .env
-    volumes:
-      - .:/app
-      - tests_venv:/app/.venv
-    depends_on:
-      - db
-    networks:
-      - task_network
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER} -d ${DB_NAME}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 
   backend:
     build: .
+
     container_name: task_management_backend
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+    command:
+      uv run uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
     ports:
       - "8000:8000"
-    env_file: .env
+
+    env_file:
+      - .env
+
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+
     volumes:
       - .:/app
       - backend_venv:/app/.venv
+
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+
     networks:
       - task_network
+
+
+  tests:
+    build: .
+
+    container_name: task_management_tests
+
+    command:
+      uv run pytest -v app/tests/
+
+    env_file:
+      - .env
+
     environment:
-      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      DB_HOST: db
+      DB_PORT: 5432
+
+    volumes:
+      - .:/app
+      - tests_venv:/app/.venv
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    networks:
+      - task_network
+
 
 volumes:
   postgres_data:
   backend_venv:
   tests_venv:
+
 
 networks:
   task_network:
