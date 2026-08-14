@@ -3,17 +3,11 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.ensure_time import ensure_utc, now_utc
+from app.comment.service import ensure_utc, now_utc
 from app.task.dao import TaskDAO
 from app.user.dao import UserDAO
-from app.task.models import Task, TaskStatus
-from app.task.schemas import TaskCreate, TaskStatusUpdate, TaskUpdate
-import math
-
-from app.task.schemas import (
-    TaskFilter,
-    TaskListResponse,
-)
+from app.task.models import Task, TaskStatus, TaskPriority
+from app.task.schemas import TaskCreate, TaskStatusUpdate, TaskUpdate, TaskStatisticsResponse
 
 
 class TaskService:
@@ -88,6 +82,11 @@ class TaskService:
 
         return task
 
+    @staticmethod
+    async def get_all(
+            session: AsyncSession,
+    ) -> list[Task]:
+        return await TaskDAO.get_all(session)
 
     @staticmethod
     async def update(
@@ -261,24 +260,39 @@ class TaskService:
         return task
 
     @staticmethod
-    async def get_filtered(
+    async def get_overdue(
             session: AsyncSession,
-            filters: TaskFilter,
-    ) -> TaskListResponse:
+    ) -> list[Task]:
+        return await TaskDAO.get_overdue(session)
 
-        tasks, total = await TaskDAO.get_filtered(
-            session,
-            filters,
+    @staticmethod
+    async def get_statistics(
+            session: AsyncSession,
+    ) -> TaskStatisticsResponse:
+        statistics = await TaskDAO.get_statistics(
+            session
         )
 
-        pages = math.ceil(
-            total / filters.page_size
-        ) if total else 0
+        by_status = {
+            status: statistics["by_status"].get(
+                status,
+                0,
+            )
+            for status in TaskStatus
+        }
 
-        return TaskListResponse(
-            items=tasks,
-            total=total,
-            page=filters.page,
-            page_size=filters.page_size,
-            pages=pages,
+        by_priority = {
+            priority: statistics["by_priority"].get(
+                priority,
+                0,
+            )
+            for priority in TaskPriority
+        }
+
+        return TaskStatisticsResponse(
+            total=statistics["total"],
+            by_status=by_status,
+            by_priority=by_priority,
+            overdue=statistics["overdue"],
+            active=statistics["active"],
         )
