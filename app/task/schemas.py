@@ -2,8 +2,8 @@ from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
-
 from app.task.models import TaskPriority, TaskStatus
+from enum import Enum
 
 
 class TaskBase(BaseModel):
