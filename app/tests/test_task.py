@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from app.task.models import TaskPriority, TaskStatus
 from app.task.dao import TaskDAO
 
-
 class TestTaskCRUD:
 
     @pytest.mark.asyncio
@@ -498,8 +497,7 @@ class TestTaskCRUD:
 
         assert response.status_code == 400
 
-
-@pytest.mark.asyncio
+  @pytest.mark.asyncio
 async def get_token(client, user):
     response = await client.post(
         "/api/v1/users/login",
@@ -521,7 +519,7 @@ class TestTaskAdditionalEndpoints:
             self,
             client,
             test_user,
-            db,
+            test_db,
     ):
         token = await get_token(client, test_user)
 
@@ -540,7 +538,7 @@ class TestTaskAdditionalEndpoints:
             json={
                 "title": "Overdue task",
                 "deadline": (
-                        now + timedelta(days=2)
+                    now + timedelta(days=2)
                 ).isoformat(),
             },
             headers=headers,
@@ -551,18 +549,19 @@ class TestTaskAdditionalEndpoints:
         overdue_task_id = overdue_response.json()["id"]
 
         # Make deadline overdue directly in DB.
-        overdue_task = await TaskDAO.get_by_id(
-            db,
-            overdue_task_id,
-        )
+        async with test_db() as db:
+            overdue_task = await TaskDAO.get_by_id(
+                db,
+                overdue_task_id,
+            )
 
-        assert overdue_task is not None
+            assert overdue_task is not None
 
-        overdue_task.deadline = (
+            overdue_task.deadline = (
                 now - timedelta(days=1)
-        )
+            )
 
-        await db.commit()
+            await db.commit()
 
         # -------------------------------------------------
         # Create active task with future deadline
@@ -573,7 +572,7 @@ class TestTaskAdditionalEndpoints:
             json={
                 "title": "Active task",
                 "deadline": (
-                        now + timedelta(days=2)
+                    now + timedelta(days=2)
                 ).isoformat(),
             },
             headers=headers,
@@ -594,13 +593,13 @@ class TestTaskAdditionalEndpoints:
 
         data = response.json()
 
-        # Only one task should be overdue
+        # Only one task should be overdue.
         assert len(data) == 1
 
         assert data[0]["id"] == overdue_task_id
         assert data[0]["title"] == "Overdue task"
 
-        # Active task must not be returned
+        # Active task must not be returned.
         assert all(
             task["title"] != "Active task"
             for task in data
@@ -611,7 +610,7 @@ class TestTaskAdditionalEndpoints:
             self,
             client,
             test_user,
-            db,
+            test_db,
     ):
         token = await get_token(client, test_user)
 
@@ -622,7 +621,7 @@ class TestTaskAdditionalEndpoints:
         now = datetime.now(timezone.utc)
 
         # -------------------------------------------------
-        # Create overdue task -> should be returned
+        # Create overdue active task
         # -------------------------------------------------
 
         overdue_response = await client.post(
@@ -630,7 +629,7 @@ class TestTaskAdditionalEndpoints:
             json={
                 "title": "Overdue active",
                 "deadline": (
-                        now + timedelta(days=2)
+                    now + timedelta(days=2)
                 ).isoformat(),
                 "assignee_id": test_user.id,
             },
@@ -641,18 +640,19 @@ class TestTaskAdditionalEndpoints:
 
         overdue_task_id = overdue_response.json()["id"]
 
-        overdue_task = await TaskDAO.get_by_id(
-            db,
-            overdue_task_id,
-        )
+        async with test_db() as db:
+            overdue_task = await TaskDAO.get_by_id(
+                db,
+                overdue_task_id,
+            )
 
-        assert overdue_task is not None
+            assert overdue_task is not None
 
-        overdue_task.deadline = (
+            overdue_task.deadline = (
                 now - timedelta(days=1)
-        )
+            )
 
-        await db.commit()
+            await db.commit()
 
         # -------------------------------------------------
         # Create task that will become Done
@@ -663,7 +663,7 @@ class TestTaskAdditionalEndpoints:
             json={
                 "title": "Overdue done",
                 "deadline": (
-                        now + timedelta(days=2)
+                    now + timedelta(days=2)
                 ).isoformat(),
                 "assignee_id": test_user.id,
             },
@@ -707,19 +707,6 @@ class TestTaskAdditionalEndpoints:
 
         assert response.status_code == 200
 
-        done_task = await TaskDAO.get_by_id(
-            db,
-            done_task_id,
-        )
-
-        assert done_task is not None
-
-        done_task.deadline = (
-                now - timedelta(days=1)
-        )
-
-        await db.commit()
-
         # -------------------------------------------------
         # Create task that will become Cancelled
         # -------------------------------------------------
@@ -729,7 +716,7 @@ class TestTaskAdditionalEndpoints:
             json={
                 "title": "Overdue cancelled",
                 "deadline": (
-                        now + timedelta(days=2)
+                    now + timedelta(days=2)
                 ).isoformat(),
             },
             headers=headers,
@@ -752,18 +739,33 @@ class TestTaskAdditionalEndpoints:
 
         assert response.status_code == 200
 
-        cancelled_task = await TaskDAO.get_by_id(
-            db,
-            cancelled_task_id,
-        )
+        # -------------------------------------------------
+        # Make Done and Cancelled tasks overdue
+        # -------------------------------------------------
 
-        assert cancelled_task is not None
+        async with test_db() as db:
+            done_task = await TaskDAO.get_by_id(
+                db,
+                done_task_id,
+            )
 
-        cancelled_task.deadline = (
+            cancelled_task = await TaskDAO.get_by_id(
+                db,
+                cancelled_task_id,
+            )
+
+            assert done_task is not None
+            assert cancelled_task is not None
+
+            done_task.deadline = (
                 now - timedelta(days=1)
-        )
+            )
 
-        await db.commit()
+            cancelled_task.deadline = (
+                now - timedelta(days=1)
+            )
+
+            await db.commit()
 
         # -------------------------------------------------
         # Get overdue tasks
@@ -783,18 +785,21 @@ class TestTaskAdditionalEndpoints:
             for task in data
         }
 
-        # Active overdue task must be returned
+        # Active overdue task must be returned.
         assert overdue_task_id in task_ids
 
-        # Done overdue task must NOT be returned
+        # Done overdue task must NOT be returned.
         assert done_task_id not in task_ids
 
-        # Cancelled overdue task must NOT be returned
+        # Cancelled overdue task must NOT be returned.
         assert cancelled_task_id not in task_ids
 
-        # Every returned task must actually be overdue
+        # Every returned task should be the active overdue task.
         for task in data:
             assert task["title"] == "Overdue active"
+
+
+class TestTaskStatistics:
 
     @pytest.mark.asyncio
     async def test_task_statistics(
@@ -809,8 +814,8 @@ class TestTaskAdditionalEndpoints:
         }
 
         deadline = (
-                datetime.now(timezone.utc)
-                + timedelta(days=2)
+            datetime.now(timezone.utc)
+            + timedelta(days=2)
         ).isoformat()
 
         # -------------------------------------------------
@@ -910,7 +915,6 @@ class TestTaskAdditionalEndpoints:
 
         assert data["overdue"] == 0
 
-
 class TestTaskBackgroundWorker:
 
     @pytest.mark.asyncio
@@ -928,12 +932,16 @@ class TestTaskBackgroundWorker:
 
         now = datetime.now(timezone.utc)
 
+        # -------------------------------------------------
+        # Create task
+        # -------------------------------------------------
+
         response = await client.post(
             "/api/v1/tasks",
             json={
                 "title": "Overdue task",
                 "deadline": (
-                        now + timedelta(days=1)
+                    now + timedelta(days=1)
                 ).isoformat(),
                 "assignee_id": test_user.id,
             },
@@ -944,6 +952,10 @@ class TestTaskBackgroundWorker:
 
         task_id = response.json()["id"]
 
+        # -------------------------------------------------
+        # Make task overdue directly in DB
+        # -------------------------------------------------
+
         async with test_db() as db:
             task = await TaskDAO.get_by_id(
                 db,
@@ -953,15 +965,23 @@ class TestTaskBackgroundWorker:
             assert task is not None
 
             task.deadline = (
-                    now - timedelta(days=1)
+                now - timedelta(days=1)
             )
 
             await db.commit()
+
+        # -------------------------------------------------
+        # Run background processing manually
+        # -------------------------------------------------
 
         from app.task.background import process_overdue_tasks
 
         async with test_db() as db:
             await process_overdue_tasks(db)
+
+        # -------------------------------------------------
+        # Check status
+        # -------------------------------------------------
 
         async with test_db() as db:
             task = await TaskDAO.get_by_id(
@@ -988,7 +1008,7 @@ class TestTaskBackgroundWorker:
         now = datetime.now(timezone.utc)
 
         # -------------------------------------------------
-        # DONE
+        # DONE task
         # -------------------------------------------------
 
         done_response = await client.post(
@@ -996,7 +1016,7 @@ class TestTaskBackgroundWorker:
             json={
                 "title": "Done overdue task",
                 "deadline": (
-                        now + timedelta(days=1)
+                    now + timedelta(days=1)
                 ).isoformat(),
                 "assignee_id": test_user.id,
             },
@@ -1041,7 +1061,7 @@ class TestTaskBackgroundWorker:
         assert response.status_code == 200
 
         # -------------------------------------------------
-        # CANCELLED
+        # CANCELLED task
         # -------------------------------------------------
 
         cancelled_response = await client.post(
@@ -1049,7 +1069,7 @@ class TestTaskBackgroundWorker:
             json={
                 "title": "Cancelled overdue task",
                 "deadline": (
-                        now + timedelta(days=1)
+                    now + timedelta(days=1)
                 ).isoformat(),
             },
             headers=headers,
@@ -1072,6 +1092,10 @@ class TestTaskBackgroundWorker:
 
         assert response.status_code == 200
 
+        # -------------------------------------------------
+        # Make both tasks overdue
+        # -------------------------------------------------
+
         async with test_db() as db:
             done_task = await TaskDAO.get_by_id(
                 db,
@@ -1087,19 +1111,27 @@ class TestTaskBackgroundWorker:
             assert cancelled_task is not None
 
             done_task.deadline = (
-                    now - timedelta(days=1)
+                now - timedelta(days=1)
             )
 
             cancelled_task.deadline = (
-                    now - timedelta(days=1)
+                now - timedelta(days=1)
             )
 
             await db.commit()
+
+        # -------------------------------------------------
+        # Run background processing
+        # -------------------------------------------------
 
         from app.task.background import process_overdue_tasks
 
         async with test_db() as db:
             await process_overdue_tasks(db)
+
+        # -------------------------------------------------
+        # Check statuses
+        # -------------------------------------------------
 
         async with test_db() as db:
             done_task = await TaskDAO.get_by_id(
@@ -1111,6 +1143,9 @@ class TestTaskBackgroundWorker:
                 db,
                 cancelled_task_id,
             )
+
+            assert done_task is not None
+            assert cancelled_task is not None
 
             assert done_task.status == TaskStatus.DONE
             assert cancelled_task.status == TaskStatus.CANCELLED
@@ -1130,12 +1165,16 @@ class TestTaskBackgroundWorker:
 
         now = datetime.now(timezone.utc)
 
+        # -------------------------------------------------
+        # Create future task
+        # -------------------------------------------------
+
         response = await client.post(
             "/api/v1/tasks",
             json={
                 "title": "Future task",
                 "deadline": (
-                        now + timedelta(days=5)
+                    now + timedelta(days=5)
                 ).isoformat(),
                 "assignee_id": test_user.id,
             },
@@ -1146,10 +1185,18 @@ class TestTaskBackgroundWorker:
 
         task_id = response.json()["id"]
 
+        # -------------------------------------------------
+        # Run background processing
+        # -------------------------------------------------
+
         from app.task.background import process_overdue_tasks
 
         async with test_db() as db:
             await process_overdue_tasks(db)
+
+        # -------------------------------------------------
+        # Task must remain Backlog
+        # -------------------------------------------------
 
         async with test_db() as db:
             task = await TaskDAO.get_by_id(
