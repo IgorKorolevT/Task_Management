@@ -6,7 +6,7 @@ from app.task.schemas import (
     TaskCreate,
     TaskResponse,
     TaskStatusUpdate,
-    TaskUpdate,
+    TaskUpdate, TaskListResponse, TaskFilter,
 )
 from app.task.service import TaskService
 from app.user.auth import get_current_user
@@ -37,13 +37,17 @@ async def create_task(
 
 @router.get(
     "",
-    response_model=list[TaskResponse],
+    response_model=TaskListResponse,
 )
 async def get_tasks(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    filters: TaskFilter = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return await TaskService.get_all(db)
+    return await TaskService.get_filtered(
+        db,
+        filters,
+    )
 
 
 @router.patch(

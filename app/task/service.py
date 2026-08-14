@@ -3,13 +3,17 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.comment.service import ensure_utc, now_utc
+from app.common.ensure_time import ensure_utc, now_utc
 from app.task.dao import TaskDAO
-from app.task.models import Task
-from app.task.schemas import TaskCreate, TaskUpdate
 from app.user.dao import UserDAO
-from app.task.models import Task, TaskPriority, TaskStatus
+from app.task.models import Task, TaskStatus
 from app.task.schemas import TaskCreate, TaskStatusUpdate, TaskUpdate
+import math
+
+from app.task.schemas import (
+    TaskFilter,
+    TaskListResponse,
+)
 
 
 class TaskService:
@@ -84,11 +88,6 @@ class TaskService:
 
         return task
 
-    @staticmethod
-    async def get_all(
-            session: AsyncSession,
-    ) -> list[Task]:
-        return await TaskDAO.get_all(session)
 
     @staticmethod
     async def update(
@@ -260,3 +259,26 @@ class TaskService:
         await session.refresh(task)
 
         return task
+
+    @staticmethod
+    async def get_filtered(
+            session: AsyncSession,
+            filters: TaskFilter,
+    ) -> TaskListResponse:
+
+        tasks, total = await TaskDAO.get_filtered(
+            session,
+            filters,
+        )
+
+        pages = math.ceil(
+            total / filters.page_size
+        ) if total else 0
+
+        return TaskListResponse(
+            items=tasks,
+            total=total,
+            page=filters.page,
+            page_size=filters.page_size,
+            pages=pages,
+        )
