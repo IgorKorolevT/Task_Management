@@ -7,6 +7,7 @@ from app.task.schemas import (
     TaskResponse,
     TaskStatusUpdate,
     TaskUpdate,
+    TaskStatisticsResponse,
 )
 from app.task.service import TaskService
 from app.user.auth import get_current_user
@@ -44,6 +45,28 @@ async def get_tasks(
         current_user: User = Depends(get_current_user),
 ):
     return await TaskService.get_all(db)
+
+
+@router.get(
+    "/overdue",
+    response_model=list[TaskResponse],
+)
+async def get_overdue_tasks(
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    return await TaskService.get_overdue(db)
+
+
+@router.get(
+    "/statistics",
+    response_model=TaskStatisticsResponse,
+)
+async def get_task_statistics(
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    return await TaskService.get_statistics(db)
 
 
 @router.patch(

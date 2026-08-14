@@ -46,8 +46,10 @@ class TaskUpdate(BaseModel):
 
     deadline: datetime | None = None
 
+
 class TaskStatusUpdate(BaseModel):
     status: TaskStatus
+
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -63,3 +65,10 @@ class TaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class TaskStatisticsResponse(BaseModel):
+    total: int
+    by_status: dict[TaskStatus, int]
+    by_priority: dict[TaskPriority, int]
+    overdue: int
+    active: int
