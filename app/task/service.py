@@ -5,11 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.comment.service import ensure_utc, now_utc
 from app.task.dao import TaskDAO
-from app.task.models import Task
-from app.task.schemas import TaskCreate, TaskUpdate
 from app.user.dao import UserDAO
-from app.task.models import Task, TaskPriority, TaskStatus
-from app.task.schemas import TaskCreate, TaskStatusUpdate, TaskUpdate
+from app.task.models import Task, TaskStatus, TaskPriority
+from app.task.schemas import TaskCreate, TaskStatusUpdate, TaskUpdate, TaskStatisticsResponse
 
 
 class TaskService:
@@ -260,3 +258,41 @@ class TaskService:
         await session.refresh(task)
 
         return task
+
+    @staticmethod
+    async def get_overdue(
+            session: AsyncSession,
+    ) -> list[Task]:
+        return await TaskDAO.get_overdue(session)
+
+    @staticmethod
+    async def get_statistics(
+            session: AsyncSession,
+    ) -> TaskStatisticsResponse:
+        statistics = await TaskDAO.get_statistics(
+            session
+        )
+
+        by_status = {
+            status: statistics["by_status"].get(
+                status,
+                0,
+            )
+            for status in TaskStatus
+        }
+
+        by_priority = {
+            priority: statistics["by_priority"].get(
+                priority,
+                0,
+            )
+            for priority in TaskPriority
+        }
+
+        return TaskStatisticsResponse(
+            total=statistics["total"],
+            by_status=by_status,
+            by_priority=by_priority,
+            overdue=statistics["overdue"],
+            active=statistics["active"],
+        )
