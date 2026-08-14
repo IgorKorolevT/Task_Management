@@ -46,6 +46,8 @@ class TaskUpdate(BaseModel):
 
     deadline: datetime | None = None
 
+class TaskStatusUpdate(BaseModel):
+    status: TaskStatus
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -60,3 +62,4 @@ class TaskResponse(BaseModel):
     deadline: datetime
     created_at: datetime
     updated_at: datetime
+
