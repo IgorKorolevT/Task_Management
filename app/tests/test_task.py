@@ -125,9 +125,14 @@ class TestTaskCRUD:
 
         data = response.json()
 
-        assert len(data) == 2
-        assert data[0]["title"] == "Task 1"
-        assert data[1]["title"] == "Task 2"
+        assert data["total"] == 2
+        assert data["page"] == 1
+        assert data["page_size"] == 20
+        assert data["pages"] == 1
+
+        assert len(data["items"]) == 2
+        assert data["items"][0]["title"] == "Task 1"
+        assert data["items"][1]["title"] == "Task 2"
 
     @pytest.mark.asyncio
     async def test_update_task(

@@ -4,14 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.task.schemas import (
     TaskCreate,
+    TaskFilter,
+    TaskListResponse,
     TaskResponse,
+    TaskStatisticsResponse,
     TaskStatusUpdate,
     TaskUpdate,
-    TaskStatisticsResponse,
 )
 from app.task.service import TaskService
 from app.user.auth import get_current_user
 from app.user.models import User
+
 
 router = APIRouter(
     prefix="/tasks",
@@ -25,9 +28,9 @@ router = APIRouter(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_task(
-        data: TaskCreate,
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    data: TaskCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return await TaskService.create(
         db,
@@ -38,13 +41,17 @@ async def create_task(
 
 @router.get(
     "",
-    response_model=list[TaskResponse],
+    response_model=TaskListResponse,
 )
 async def get_tasks(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    filters: TaskFilter = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return await TaskService.get_all(db)
+    return await TaskService.get_filtered(
+        db,
+        filters,
+    )
 
 
 @router.get(
@@ -52,10 +59,12 @@ async def get_tasks(
     response_model=list[TaskResponse],
 )
 async def get_overdue_tasks(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return await TaskService.get_overdue(db)
+    return await TaskService.get_overdue(
+        db
+    )
 
 
 @router.get(
@@ -63,10 +72,12 @@ async def get_overdue_tasks(
     response_model=TaskStatisticsResponse,
 )
 async def get_task_statistics(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return await TaskService.get_statistics(db)
+    return await TaskService.get_statistics(
+        db
+    )
 
 
 @router.patch(
@@ -74,10 +85,10 @@ async def get_task_statistics(
     response_model=TaskResponse,
 )
 async def change_task_status(
-        task_id: int,
-        data: TaskStatusUpdate,
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    task_id: int,
+    data: TaskStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return await TaskService.change_status(
         db,
@@ -91,9 +102,9 @@ async def change_task_status(
     response_model=TaskResponse,
 )
 async def get_task(
-        task_id: int,
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return await TaskService.get_by_id(
         db,
@@ -106,10 +117,10 @@ async def get_task(
     response_model=TaskResponse,
 )
 async def update_task(
-        task_id: int,
-        data: TaskUpdate,
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    task_id: int,
+    data: TaskUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return await TaskService.update(
         db,
@@ -123,9 +134,9 @@ async def update_task(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_task(
-        task_id: int,
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     await TaskService.delete(
         db,

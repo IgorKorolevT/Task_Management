@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
 
+    # Background tasks
+    OVERDUE_TASK_CHECK_INTERVAL: int = 60
+
     @property
     def DATABASE_URL(self) -> str:
         return (

@@ -1,11 +1,14 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.config import get_settings
-from app.user.routes import router as user_router
-from app.task.routes import router as task_router
 from app.comment.router import router as comment_router
+from app.config import get_settings
+from app.database import async_session_maker
+from app.task.background import overdue_tasks_worker
+from app.task.routes import router as task_router
+from app.user.routes import router as user_router
 
 
 settings = get_settings()
@@ -13,7 +16,23 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
+    worker_task = asyncio.create_task(
+        overdue_tasks_worker(
+            async_session_maker,
+            interval=settings.OVERDUE_TASK_CHECK_INTERVAL,
+        )
+    )
+
+    try:
+        yield
+
+    finally:
+        worker_task.cancel()
+
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -29,10 +48,12 @@ app.include_router(
     user_router,
     prefix=settings.API_V1_PREFIX,
 )
+
 app.include_router(
     task_router,
     prefix=settings.API_V1_PREFIX,
 )
+
 app.include_router(
     comment_router,
     prefix=settings.API_V1_PREFIX,

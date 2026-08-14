@@ -1,26 +1,39 @@
 from datetime import datetime, timezone
+from math import ceil
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.comment.service import ensure_utc, now_utc
+from app.common.ensure_time import ensure_utc, now_utc
 from app.task.dao import TaskDAO
+from app.task.models import (
+    Task,
+    TaskPriority,
+    TaskStatus,
+)
+from app.task.schemas import (
+    TaskCreate,
+    TaskFilter,
+    TaskListResponse,
+    TaskStatisticsResponse,
+    TaskStatusUpdate,
+    TaskUpdate,
+)
 from app.user.dao import UserDAO
-from app.task.models import Task, TaskStatus, TaskPriority
-from app.task.schemas import TaskCreate, TaskStatusUpdate, TaskUpdate, TaskStatisticsResponse
 
 
 class TaskService:
 
     @staticmethod
     async def create(
-            session: AsyncSession,
-            data: TaskCreate,
-            author_id: int,
+        session: AsyncSession,
+        data: TaskCreate,
+        author_id: int,
     ) -> Task:
-        now = datetime.now(timezone.utc)
 
-        if data.deadline <= now:
+        deadline = ensure_utc(data.deadline)
+
+        if deadline <= now_utc():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Deadline must be in the future",
@@ -38,15 +51,20 @@ class TaskService:
                     detail="Assignee not found or inactive",
                 )
 
-            active_tasks = await TaskDAO.count_active_by_assignee(
-                session,
-                data.assignee_id,
+            active_tasks = (
+                await TaskDAO.count_active_by_assignee(
+                    session,
+                    data.assignee_id,
+                )
             )
 
             if active_tasks >= 10:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="User cannot have more than 10 active tasks",
+                    detail=(
+                        "User cannot have more than "
+                        "10 active tasks"
+                    ),
                 )
 
         task = await TaskDAO.create(
@@ -56,7 +74,7 @@ class TaskService:
             priority=data.priority,
             assignee_id=data.assignee_id,
             author_id=author_id,
-            deadline=data.deadline,
+            deadline=deadline,
         )
 
         await session.commit()
@@ -66,8 +84,8 @@ class TaskService:
 
     @staticmethod
     async def get_by_id(
-            session: AsyncSession,
-            task_id: int,
+        session: AsyncSession,
+        task_id: int,
     ) -> Task:
         task = await TaskDAO.get_by_id(
             session,
@@ -83,29 +101,27 @@ class TaskService:
         return task
 
     @staticmethod
-    async def get_all(
-            session: AsyncSession,
-    ) -> list[Task]:
-        return await TaskDAO.get_all(session)
-
-    @staticmethod
     async def update(
-            session: AsyncSession,
-            task_id: int,
-            data: TaskUpdate,
+        session: AsyncSession,
+        task_id: int,
+        data: TaskUpdate,
     ) -> Task:
+
         task = await TaskService.get_by_id(
             session,
             task_id,
         )
 
         if task.status in (
-                TaskStatus.DONE,
-                TaskStatus.CANCELLED,
+            TaskStatus.DONE,
+            TaskStatus.CANCELLED,
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Task cannot be edited in its current status",
+                detail=(
+                    "Task cannot be edited "
+                    "in its current status"
+                ),
             )
 
         update_data = data.model_dump(
@@ -113,22 +129,30 @@ class TaskService:
         )
 
         if "deadline" in update_data:
-            deadline = update_data["deadline"]
+            deadline = ensure_utc(
+                update_data["deadline"]
+            )
 
-            if deadline <= datetime.now(timezone.utc):
+            if deadline <= now_utc():
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Deadline must be in the future",
                 )
 
+            update_data["deadline"] = deadline
+
         if "assignee_id" in update_data:
+
             if task.status in (
-                    TaskStatus.REVIEW,
-                    TaskStatus.DONE,
+                TaskStatus.REVIEW,
+                TaskStatus.DONE,
             ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Assignee cannot be changed in Review or Done status",
+                    detail=(
+                        "Assignee cannot be changed "
+                        "in Review or Done status"
+                    ),
                 )
 
             assignee_id = update_data["assignee_id"]
@@ -145,18 +169,23 @@ class TaskService:
                         detail="Assignee not found or inactive",
                     )
 
-                active_tasks = await TaskDAO.count_active_by_assignee(
-                    session,
-                    assignee_id,
+                active_tasks = (
+                    await TaskDAO.count_active_by_assignee(
+                        session,
+                        assignee_id,
+                    )
                 )
 
                 if (
-                        active_tasks >= 10
-                        and assignee_id != task.assignee_id
+                    active_tasks >= 10
+                    and assignee_id != task.assignee_id
                 ):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="User cannot have more than 10 active tasks",
+                        detail=(
+                            "User cannot have more than "
+                            "10 active tasks"
+                        ),
                     )
 
         task = await TaskDAO.update(
@@ -172,21 +201,25 @@ class TaskService:
 
     @staticmethod
     async def delete(
-            session: AsyncSession,
-            task_id: int,
+        session: AsyncSession,
+        task_id: int,
     ) -> None:
+
         task = await TaskService.get_by_id(
             session,
             task_id,
         )
 
         if task.status in (
-                TaskStatus.IN_PROGRESS,
-                TaskStatus.REVIEW,
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.REVIEW,
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Task cannot be deleted in its current status",
+                detail=(
+                    "Task cannot be deleted "
+                    "in its current status"
+                ),
             )
 
         await TaskDAO.delete(
@@ -198,10 +231,11 @@ class TaskService:
 
     @staticmethod
     async def change_status(
-            session: AsyncSession,
-            task_id: int,
-            data: TaskStatusUpdate,
+        session: AsyncSession,
+        task_id: int,
+        data: TaskStatusUpdate,
     ) -> Task:
+
         task = await TaskService.get_by_id(
             session,
             task_id,
@@ -226,26 +260,36 @@ class TaskService:
 
         new_status = data.status
 
-        if new_status not in allowed_transitions[task.status]:
+        if new_status not in allowed_transitions[
+            task.status
+        ]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     f"Cannot change status from "
-                    f"{task.status.value} to {new_status.value}"
+                    f"{task.status.value} to "
+                    f"{new_status.value}"
                 ),
             )
 
         if new_status == TaskStatus.DONE:
+
             if task.assignee_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Task must have an assignee before completion",
+                    detail=(
+                        "Task must have an assignee "
+                        "before completion"
+                    ),
                 )
 
             if ensure_utc(task.deadline) <= now_utc():
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Cannot complete task after deadline",
+                    detail=(
+                        "Cannot complete task "
+                        "after deadline"
+                    ),
                 )
 
         task = await TaskDAO.update(
@@ -260,25 +304,54 @@ class TaskService:
         return task
 
     @staticmethod
+    async def get_filtered(
+        session: AsyncSession,
+        filters: TaskFilter,
+    ) -> TaskListResponse:
+
+        tasks, total = await TaskDAO.get_filtered(
+            session,
+            filters,
+        )
+
+        pages = (
+            ceil(total / filters.page_size)
+            if total
+            else 0
+        )
+
+        return TaskListResponse(
+            items=tasks,
+            total=total,
+            page=filters.page,
+            page_size=filters.page_size,
+            pages=pages,
+        )
+
+    @staticmethod
     async def get_overdue(
-            session: AsyncSession,
+        session: AsyncSession,
     ) -> list[Task]:
-        return await TaskDAO.get_overdue(session)
+
+        return await TaskDAO.get_overdue(
+            session
+        )
 
     @staticmethod
     async def get_statistics(
-            session: AsyncSession,
+        session: AsyncSession,
     ) -> TaskStatisticsResponse:
+
         statistics = await TaskDAO.get_statistics(
             session
         )
 
         by_status = {
-            status: statistics["by_status"].get(
-                status,
+            task_status: statistics["by_status"].get(
+                task_status,
                 0,
             )
-            for status in TaskStatus
+            for task_status in TaskStatus
         }
 
         by_priority = {
